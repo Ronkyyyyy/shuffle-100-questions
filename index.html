@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>シャッフル100の質問メーカー</title>
+    <style>
+        /* --- スタイル（基本変更なし） --- */
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Segoe UI", sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .container {
+            background-color: white;
+            border-radius: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 500px;
+            padding: 24px;
+            text-align: center;
+            min-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            position: relative;
+        }
+
+        h1 { font-size: 22px; margin-bottom: 20px; color: #444; }
+        h2 { font-size: 16px; color: #888; margin-bottom: 10px; }
+
+        .btn {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 14px 24px;
+            border-radius: 50px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin: 8px;
+            font-weight: bold;
+            width: 80%;
+            max-width: 300px;
+            touch-action: manipulation;
+        }
+        .btn:hover { background-color: #0056b3; transform: translateY(-2px); }
+        .btn:active { transform: translateY(0); }
+        .btn-secondary { background-color: #6c757d; }
+        .btn-secondary:hover { background-color: #545b62; }
+        .btn:disabled, .btn.disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .settings-group { margin-bottom: 24px; text-align: left; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; color: #555; }
+        
+        /* スライダーを大きく見やすく */
+        input[type="range"] { 
+            width: 100%; 
+            margin-top: 10px; 
+            cursor: pointer;
+        }
+
+        .question-card {
+            font-size: 26px; line-height: 1.6; margin: 40px 0; font-weight: bold; word-break: break-all;
+        }
+        
+        .shuffled-word {
+            display: inline-block; background-color: #333; color: transparent;
+            padding: 4px 12px; border-radius: 8px; cursor: pointer; user-select: none;
+            transition: all 0.3s ease; min-width: 70px; text-align: center;
+            position: relative; vertical-align: middle; margin: 0 4px;
+        }
+        .shuffled-word.revealed {
+            background-color: #ffeb3b; color: #d32f2f; transform: scale(1.1);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+        }
+        .shuffled-word:not(.revealed)::after {
+            content: "???"; color: white; position: absolute;
+            left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 16px;
+        }
+
+        .result-list { text-align: left; max-height: 50vh; overflow-y: auto; margin-bottom: 20px; padding-right: 5px; }
+        .result-item { background: #fafafa; margin-bottom: 12px; padding: 15px; border-radius: 12px; border: 1px solid #eee; }
+        .result-q { font-weight: bold; font-size: 16px; margin-bottom: 6px; color: #333; }
+        .original-text { font-size: 13px; color: #999; margin-left: 2px; }
+
+        .screen { display: none; height: 100%; width: 100%; flex-direction: column; justify-content: space-between; }
+        .screen.active { display: flex; }
+        .footer-actions { margin-top: auto; width: 100%; display: flex; flex-direction: column; align-items: center; }
+
+        #toast {
+            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+            background-color: rgba(0,0,0,0.8); color: white; padding: 10px 24px;
+            border-radius: 30px; opacity: 0; transition: opacity 0.3s; pointer-events: none;
+        }
+        #toast.show { opacity: 1; }
+
+        #loading-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.9); z-index: 1000;
+            display: flex; justify-content: center; align-items: center; flex-direction: column;
+        }
+        .loader {
+            border: 5px solid #f3f3f3; border-top: 5px solid #007bff; border-radius: 50%;
+            width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 15px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<div id="loading-overlay">
+    <div class="loader"></div>
+    <div>データを読み込み中...</div>
+</div>
+
+<div class="container">
+    <div id="screen-setup" class="screen">
+        <div>
+            <h1>🔀 シャッフル100の質問</h1>
+            
+            <div class="settings-group">
+                <label>質問数: <span id="count-display">10</span>問</label>
+                <input type="range" id="q-count" min="1" max="100" value="10" step="1">
+            </div>
+            
+            <div id="data-status" style="font-size: 12px; color: #888; margin-top: 10px;">
+                </div>
+        </div>
+
+        <div class="footer-actions">
+            <button class="btn" onclick="startGame()">スタート！</button>
+        </div>
+    </div>
+
+    <div id="screen-play" class="screen">
+        <div>
+            <h2 id="question-counter">Q. 1 / 5</h2>
+            <div class="question-card" id="question-text"></div>
+        </div>
+        
+        <div class="footer-actions">
+            <button id="next-btn" class="btn" onclick="nextQuestion()" disabled>次の質問へ</button>
+            <button class="btn btn-secondary" onclick="resetGame()" style="font-size:12px; padding: 8px 16px;">中断する</button>
+        </div>
+    </div>
+
+    <div id="screen-result" class="screen">
+        <div>
+            <h1>🎉 終了！</h1>
+            <div class="result-list" id="result-list"></div>
+        </div>
+        
+        <div class="footer-actions">
+            <button class="btn" onclick="copyResults()">テキストをコピー</button>
+            <button class="btn btn-secondary" onclick="resetGame()">もう一度遊ぶ</button>
+        </div>
+    </div>
+</div>
+
+<div id="toast">コピーしました！</div>
+
+<script>
+    // ★★★ここに発行されたGASのURLを貼り付けてください★★★
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyavsPH5s6J6E3MQR6zSXqrkOzzAxAG20AX0xWc5BBABz040z5n6Xeo0sWNk791IiaC/exec"; 
+    
+    // --- デフォルトデータ（通信エラー時の保険） ---
+    const fallbackDatabase = [
+        { template: "（通信エラー）あなたの[%s]はどこですか？", words: ["出身地"], category: "default" },
+        { template: "（通信エラー）趣味は[%s]ですか？", words: ["読書"], category: "default" },
+        { template: "（通信エラー）[%s]と[%s]、どっちが大事？", words: ["愛", "お金"], category: "default" }
+    ];
+
+    let database = []; 
+    let currentQuestions = []; 
+    let currentIndex = 0;
+    let revealedCount = 0;
+    let totalSlotsInCurrent = 0;
+
+    // --- 起動時のデータ取得 ---
+    window.addEventListener('load', async () => {
+        const overlay = document.getElementById('loading-overlay');
+        const statusEl = document.getElementById('data-status');
+
+        if (!GAS_API_URL) {
+            console.warn("GAS_API_URLが設定されていません。デモデータを使用します。");
+            database = fallbackDatabase; 
+            overlay.style.display = 'none';
+            showScreen('screen-setup');
+            statusEl.textContent = "※デモモード（URL未設定）";
+            return;
+        }
+
+        try {
+            const response = await fetch(GAS_API_URL);
+            if (!response.ok) throw new Error('Network response was not ok');
+            const data = await response.json();
+            
+            database = data; 
+            statusEl.textContent = `※スプレッドシートから${database.length}件読み込みました`;
+        } catch (error) {
+            console.error('Fetch error:', error);
+            database = fallbackDatabase; 
+            alert("スプレッドシートの読み込みに失敗しました。オフライン用データで起動します。");
+            statusEl.textContent = "※通信エラー（オフラインモード）";
+        } finally {
+            overlay.style.display = 'none'; 
+            showScreen('screen-setup');
+        }
+    });
+
+    const qCountInput = document.getElementById('q-count');
+    const countDisplay = document.getElementById('count-display');
+    qCountInput.addEventListener('input', (e) => countDisplay.textContent = e.target.value);
+
+    // --- ゲーム開始 ---
+    function startGame() {
+        const count = parseInt(qCountInput.value);
+
+        // ジャンルフィルタなし、全データ対象
+        let filteredData = [...database];
+
+        // データ不足時の水増し（ループさせる）
+        if (filteredData.length === 0) {
+            alert("データがありません！");
+            return;
+        }
+        while (filteredData.length < count) {
+            filteredData = filteredData.concat(filteredData);
+        }
+
+        shuffleArray(filteredData);
+        const selectedData = filteredData.slice(0, count);
+
+        // 全ワード回収
+        let wordPool = [];
+        selectedData.forEach(item => { wordPool.push(...item.words); });
+        shuffleArray(wordPool);
+
+        // 質問構築
+        currentQuestions = selectedData.map(item => {
+            const slotsCount = (item.template.match(/%s/g) || []).length;
+            const allocatedWords = [];
+            for(let i=0; i<slotsCount; i++) {
+                allocatedWords.push(wordPool.pop() || "謎");
+            }
+            return {
+                template: item.template,
+                allocatedWords: allocatedWords,
+                originalWords: item.words
+            };
+        });
+
+        currentIndex = 0;
+        showScreen('screen-play');
+        showQuestion();
+    }
+
+    function showQuestion() {
+        const qData = currentQuestions[currentIndex];
+        const counterEl = document.getElementById('question-counter');
+        const textEl = document.getElementById('question-text');
+        const nextBtn = document.getElementById('next-btn');
+
+        counterEl.textContent = `Q. ${currentIndex + 1} / ${currentQuestions.length}`;
+        revealedCount = 0;
+        totalSlotsInCurrent = (qData.template.match(/%s/g) || []).length;
+        nextBtn.disabled = true;
+        if(currentIndex === currentQuestions.length - 1) {
+            nextBtn.textContent = "結果を見る";
+        } else {
+            nextBtn.textContent = "次の質問へ";
+        }
+
+        let htmlText = qData.template;
+        qData.allocatedWords.forEach(word => {
+            htmlText = htmlText.replace('%s', `<span class="shuffled-word" onclick="reveal(this, '${word}')"></span>`);
+        });
+        textEl.innerHTML = htmlText;
+    }
+
+    function reveal(element, word) {
+        if (!element.classList.contains('revealed')) {
+            element.textContent = word;
+            element.classList.add('revealed');
+            revealedCount++;
+            if (revealedCount >= totalSlotsInCurrent) {
+                document.getElementById('next-btn').disabled = false;
+            }
+        }
+    }
+
+    function nextQuestion() {
+        if (currentIndex < currentQuestions.length - 1) {
+            currentIndex++;
+            showQuestion();
+        } else {
+            showResult();
+        }
+    }
+
+    function showResult() {
+        showScreen('screen-result');
+        const listEl = document.getElementById('result-list');
+        listEl.innerHTML = '';
+
+        currentQuestions.forEach((q, idx) => {
+            let finalText = fillTemplate(q.template, q.allocatedWords);
+            let originalText = fillTemplate(q.template, q.originalWords);
+            const itemDiv = document.createElement('div');
+            itemDiv.className = 'result-item';
+            itemDiv.innerHTML = `<div class="result-q">Q${idx+1}. ${finalText}</div><div class="original-text">（元：${originalText}）</div>`;
+            listEl.appendChild(itemDiv);
+        });
+    }
+
+    function fillTemplate(tpl, words) {
+        let text = tpl;
+        words.forEach(w => { text = text.replace('%s', w); });
+        return text;
+    }
+
+    function copyResults() {
+        let textToCopy = "【シャッフル100の質問メーカー】\n";
+        currentQuestions.forEach((q, idx) => {
+            let finalText = fillTemplate(q.template, q.allocatedWords);
+            textToCopy += `Q${idx+1}. ${finalText}\n`;
+        });
+        textToCopy += "\n#シャッフル100の質問";
+        navigator.clipboard.writeText(textToCopy).then(() => {
+            const toast = document.getElementById('toast');
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 2000);
+        });
+    }
+
+    function showScreen(id) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        if(id) document.getElementById(id).classList.add('active');
+    }
+    function resetGame() { showScreen('screen-setup'); }
+    function shuffleArray(array) {
+        for (let i = array.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [array[i], array[j]] = [array[j], array[i]];
+        }
+    }
+</script>
+
+</body>
+</html>
