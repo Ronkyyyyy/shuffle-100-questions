@@ -210,11 +210,11 @@
             const data = await response.json();
             
             database = data; 
-            statusEl.textContent = `※スプレッドシートから${database.length}件読み込みました`;
+            statusEl.textContent = `※${database.length}問中いくつ答えますか？`;
         } catch (error) {
             console.error('Fetch error:', error);
             database = fallbackDatabase; 
-            alert("スプレッドシートの読み込みに失敗しました。オフライン用データで起動します。");
+            alert("読み込みに失敗しました。オフライン用データで起動します。");
             statusEl.textContent = "※通信エラー（オフラインモード）";
         } finally {
             overlay.style.display = 'none'; 
